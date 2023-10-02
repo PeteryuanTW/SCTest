@@ -1,0 +1,167 @@
+﻿@page "/"
+@using System.Net.Http.Headers;
+@using Newtonsoft.Json;
+@using System.Text;
+
+
+<DxFormLayout>
+	<DxFormLayoutGroup Caption="setting">
+		<DxFormLayoutItem Caption="ip" ColSpanLg="2">
+			<DxTextBox Text="@ip" NullText="192.168.132.2" TextChanged="((string s)=>{ip = s;UpdateUrl();})"></DxTextBox>
+		</DxFormLayoutItem>
+		<DxFormLayoutItem Caption="port" ColSpanLg="1">
+			<DxSpinEdit Value="@port" ValueChanged="((ushort i)=>{port = i;UpdateUrl();})"></DxSpinEdit>
+		</DxFormLayoutItem>
+		<DxFormLayoutItem Caption="baseurl" ColSpanLg="2">
+			<DxTextBox @bind-Text="url" Enabled="false"></DxTextBox>
+		</DxFormLayoutItem>
+	</DxFormLayoutGroup>
+	<DxFormLayoutGroup Caption="Bearer Token">
+		<DxFormLayoutItem ColSpanLg="1">
+			<DxButton Text="Get Token" Click="(async()=>{await UpdateToken();})"></DxButton>
+		</DxFormLayoutItem>
+		<DxFormLayoutItem ColSpanLg="8">
+			<DxTextBox @bind-Text="@_bearerToken"></DxTextBox>
+		</DxFormLayoutItem>
+	</DxFormLayoutGroup>
+	@if (_bearerToken != null)
+	{
+		<DxFormLayoutGroup Caption="Post Test">
+			<DxFormLayoutItem ColSpanLg="2" Caption="Flow Name">
+				<DxTextBox @bind-Text="@flowName" NullText="APITest_Flow"></DxTextBox>
+			</DxFormLayoutItem>
+			<DxFormLayoutItem ColSpanLg="2" Caption="Cell">
+				<DxTextBox Text="@cellTest" TextChanged="((string s)=>{cellTest = s; UpdateCell();})"></DxTextBox>
+			</DxFormLayoutItem>
+			<DxFormLayoutItem ColSpanLg="2" Caption="Cell format">
+				<DxTextBox @bind-Text="@formate_cell" Enabled="false"></DxTextBox>
+			</DxFormLayoutItem>
+			<DxFormLayoutItem ColSpanLg="1">
+				<DxButton Text="Post Flow" Click="(async()=>{await PostAPI();})"></DxButton>
+			</DxFormLayoutItem>
+		</DxFormLayoutGroup>
+		<DxFormLayoutGroup Caption="Get Test">
+			<DxFormLayoutItem ColSpanLg="1">
+				<DxButton Text="Get Test" Click="(async()=>{await UpdateAMRStatus();})"></DxButton>
+			</DxFormLayoutItem>
+		</DxFormLayoutGroup>
+	}
+</DxFormLayout>
+
+
+@code {
+	private string? ip;
+	private ushort port = 5000;
+	private string? url;
+
+	private HttpClient httpClient_swarmCore;
+
+	private string? _bearerToken;
+
+	private string? flowName;
+	private string? cellTest;
+	private string? formate_cell;
+
+	protected override Task OnInitializedAsync()
+	{
+		httpClient_swarmCore = new HttpClient();
+		return base.OnInitializedAsync();
+	}
+
+	private void UpdateCell()
+	{
+		formate_cell = "TM_2@default_area@" + cellTest;
+		StateHasChanged();
+	}
+
+	private void UpdateUrl()
+	{
+		url = "http://" + ip + ":" + port;
+		StateHasChanged();
+	}
+
+	public async Task UpdateToken()
+	{
+		try
+		{
+			string postfix = "/login/access-token";
+			var data = new[]
+			{
+				new KeyValuePair<string, string>("username", "admin"),
+				new KeyValuePair<string, string>("password", "admin"),
+	};
+			var res = await httpClient_swarmCore.PostAsync(url + postfix, new FormUrlEncodedContent(data));
+			var responseStr = await res.Content.ReadAsStringAsync();
+			BearerToken bearerToken = Newtonsoft.Json.JsonConvert.DeserializeObject<BearerToken>(responseStr);
+			_bearerToken = bearerToken.access_token;
+			httpClient_swarmCore.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", _bearerToken);
+		}
+		catch (Exception e)
+		{
+			Console.WriteLine(e.Message);
+		}
+
+	}
+
+	public async Task PostAPI()
+	{
+		var args = new
+		{
+			start_time = "",
+			end_time = "",
+			interval = "",
+			@params = new
+			{
+				global = new
+				{
+					goal_cJntO = formate_cell,
+				}
+			}
+		};
+		var finalRes = new
+		{
+			args
+		};
+		var body = JsonConvert.SerializeObject(finalRes);
+		try
+		{
+			var res = await httpClient_swarmCore.PostAsync(url + "/v2/flows/" + flowName, new StringContent(body, Encoding.UTF8, "application/json"));
+			var respond = await res.Content.ReadAsStringAsync();
+		}
+		catch (Exception e)
+		{
+			Console.WriteLine(e.Message);
+		}
+	}
+
+	public async Task UpdateAMRStatus()
+	{
+		string postfix = "/v2/fleets/status";
+		try
+		{
+			var res = await httpClient_swarmCore.GetAsync(url + postfix);
+			var responseStr = await res.Content.ReadAsStringAsync();
+
+			Console.WriteLine(responseStr);
+			// DateTime updateTime = DateTime.Now;
+			// Fleetstates robots = JsonConvert.DeserializeObject<Fleetstates>(responseStr);
+			// FleetState targetFleet = robots.fleet_state[0];
+
+			// if (robots != null)
+			// {
+			// 	AMRstatusList = FARobotToAMRStatus(targetFleet, updateTime);
+			// }
+			// else
+			// {
+			// 	AMRstatusList = new();
+			// }
+
+			// OnAMRstatusListChange();
+		}
+		catch (Exception e)
+		{
+			Console.WriteLine(e.Message);
+		}
+
+	}
+}
